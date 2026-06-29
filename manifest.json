@@ -1,5 +1,5 @@
 {
-    "display_name": "Transfer Chat",
+    "display_name": "EasyChatMove",
     "loading_order": 100,
     "requires": [],
     "optional": [],
@@ -7,7 +7,7 @@
     "css": "style.css",
     "author": "SillyTavern",
     "version": "1.0.0",
-    "homePage": "https://github.com/SillyTavern/SillyTavern",
+    "homePage": "https://github.com/ddebug/EasyChatMove/tree/master#",
     "hooks": {
         "activate": "init"
     }
