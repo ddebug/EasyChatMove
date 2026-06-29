@@ -9,11 +9,11 @@ import {
     openCharacterChat,
     event_types,
     eventSource,
-} from '../../../script.js';
-import { selected_group } from '../../group-chats.js';
-import { POPUP_TYPE, callGenericPopup } from '../../popup.js';
-import { humanizedDateTime } from '../../RossAscends-mods.js';
-import { delay } from '../../utils.js';
+} from '../../../../script.js';
+import { selected_group } from '../../../group-chats.js';
+import { POPUP_TYPE, callGenericPopup } from '../../../popup.js';
+import { humanizedDateTime } from '../../../RossAscends-mods.js';
+import { delay } from '../../../utils.js';
 
 /**
  * Build the character selector popup HTML.
