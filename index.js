@@ -2,7 +2,6 @@ import {
     characters,
     this_chid,
     chat,
-    chat_metadata,
     getRequestHeaders,
     saveChatConditional,
     selectCharacterById,
@@ -12,7 +11,6 @@ import {
 } from '../../../../script.js';
 import { selected_group } from '../../../group-chats.js';
 import { POPUP_TYPE, callGenericPopup } from '../../../popup.js';
-import { humanizedDateTime } from '../../../RossAscends-mods.js';
 import { delay } from '../../../utils.js';
 
 /**
@@ -45,6 +43,70 @@ function buildCharacterSelectorHtml() {
             </label>
         </div>
     `;
+}
+
+/**
+ * Export the current chat as raw JSONL from the server,
+ * then import it into the target character via multipart upload.
+ * This avoids serializing the entire chat in the JSON request body,
+ * which breaks for large (4MB+) chats.
+ * @param {object} targetChar Target character object
+ * @returns {Promise<string|null>} The imported chat file name (without .jsonl), or null on failure
+ */
+async function copyCurrentChatToCharacter(targetChar) {
+    const sourceChar = characters[this_chid];
+    const currentChatName = sourceChar.chat;
+
+    const exportResponse = await fetch('/api/chats/export', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({
+            avatar_url: sourceChar.avatar,
+            file: `${currentChatName}.jsonl`,
+            exportfilename: `${currentChatName}.jsonl`,
+            format: 'jsonl',
+            is_group: false,
+        }),
+    });
+
+    if (!exportResponse.ok) {
+        throw new Error(`导出聊天失败: ${exportResponse.status}`);
+    }
+
+    const exportData = await exportResponse.json();
+    const rawJsonl = exportData.result;
+
+    if (!rawJsonl || rawJsonl.length === 0) {
+        throw new Error('导出的聊天内容为空');
+    }
+
+    const blob = new Blob([rawJsonl], { type: 'application/jsonl' });
+    const file = new File([blob], `${currentChatName}.jsonl`, { type: 'application/jsonl' });
+
+    const formData = new FormData();
+    formData.set('avatar', file);
+    formData.set('avatar_url', targetChar.avatar);
+    formData.set('file_type', 'jsonl');
+    formData.set('character_name', targetChar.name);
+    formData.set('user_name', 'User');
+
+    const importResponse = await fetch('/api/chats/import', {
+        method: 'POST',
+        body: formData,
+        headers: getRequestHeaders({ omitContentType: true }),
+        cache: 'no-cache',
+    });
+
+    if (!importResponse.ok) {
+        throw new Error(`导入聊天失败: ${importResponse.status}`);
+    }
+
+    const importData = await importResponse.json();
+    if (!importData.res || !importData.fileNames?.length) {
+        throw new Error('导入返回异常');
+    }
+
+    return importData.fileNames[0].replace('.jsonl', '');
 }
 
 /**
@@ -111,46 +173,21 @@ async function transferChat() {
 
         await saveChatConditional();
 
-        const newChatName = `${targetChar.name} - ${humanizedDateTime()} transferred`;
-
-        const chatHeader = {
-            chat_metadata: { ...chat_metadata },
-            user_name: 'unused',
-            character_name: 'unused',
-        };
-
-        const chatData = [chatHeader, ...chat];
-
-        const response = await fetch('/api/chats/save', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({
-                ch_name: targetChar.name,
-                file_name: newChatName,
-                chat: chatData,
-                avatar_url: targetChar.avatar,
-                force: true,
-            }),
-            cache: 'no-cache',
-        });
-
-        if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
-        }
+        const importedChatName = await copyCurrentChatToCharacter(targetChar);
 
         toastr.success(
             `聊天记录已成功转移到 ${targetChar.name}！`,
             '转移聊天',
         );
 
-        if (shouldSwitch) {
+        if (shouldSwitch && importedChatName) {
             await selectCharacterById(selectedTargetIdx);
             await delay(500);
-            await openCharacterChat(newChatName);
+            await openCharacterChat(importedChatName);
         }
     } catch (error) {
         console.error('[Transfer Chat] Error:', error);
-        toastr.error('转移聊天记录失败，请查看控制台获取详细信息。', '转移聊天');
+        toastr.error(`转移失败: ${error.message}`, '转移聊天');
     }
 }
 
